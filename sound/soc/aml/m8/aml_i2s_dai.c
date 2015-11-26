@@ -34,27 +34,10 @@ static int i2s_pos_sync = 0;
 #define ALSA_DEBUG(fmt,args...) 	printk(KERN_INFO "[aml-i2s-dai]" fmt,##args)
 #define ALSA_TRACE()     			printk("[aml-i2s-dai] enter func %s,line %d\n",__FUNCTION__,__LINE__)
 #else
-#define ALSA_DEBUG(fmt,args...)
-#define ALSA_TRACE()
+#define ALSA_DEBUG(fmt,args...) 
+#define ALSA_TRACE()   
 #endif
-extern int amaudio2_enable;
-extern unsigned int IEC958_mode_codec;
-extern int kernel_android_50;
 
-
-extern int set_i2s_iec958_samesource(int enable);
-
-static int i2sbuf[32+16];
-static void  aml_i2s_play(void)
-{
-	audio_util_set_dac_i2s_format(AUDIO_ALGOUT_DAC_FORMAT_DSP);
-	audio_set_i2s_mode(AIU_I2S_MODE_PCM16);
-	memset(i2sbuf,0,sizeof(i2sbuf));	
-	audio_set_aiubuf((virt_to_phys(i2sbuf)+63)&(~63),128,2);
-	audio_out_i2s_enable(1);
-	
-        
-}
 /*
 the I2S hw  and IEC958 PCM output initation,958 initation here,
 for the case that only use our ALSA driver for PCM s/pdif output.
@@ -79,11 +62,11 @@ static void  aml_hw_i2s_init(struct snd_pcm_runtime *runtime)
 }
 static int aml_dai_i2s_startup(struct snd_pcm_substream *substream,
 					struct snd_soc_dai *dai)
-{
+{	  	
 	int ret = 0;
     struct snd_pcm_runtime *runtime = substream->runtime;
     struct aml_runtime_data *prtd = (struct aml_runtime_data *)runtime->private_data;
-	audio_stream_t *s;
+	audio_stream_t *s;	
     ALSA_TRACE();
 	if(prtd == NULL){
 		prtd = (struct aml_runtime_data *)kzalloc(sizeof(struct aml_runtime_data), GFP_KERNEL);
@@ -93,15 +76,15 @@ static int aml_dai_i2s_startup(struct snd_pcm_substream *substream,
 			goto out;
 		}
 		prtd->substream = substream;
-		runtime->private_data = prtd;
+		runtime->private_data = prtd;		
 	}
-	s = &prtd->s;
+	s = &prtd->s; 
 	if(substream->stream == SNDRV_PCM_STREAM_PLAYBACK){
 		s->device_type = AML_AUDIO_I2SOUT;
-	}
+	}	
 	else{
-		s->device_type = AML_AUDIO_I2SIN;
-	}
+		s->device_type = AML_AUDIO_I2SIN;	
+	}	
 	return 0;
 out:
 	return ret;
@@ -117,16 +100,15 @@ static void aml_dai_i2s_shutdown(struct snd_pcm_substream *substream,
 }
 #define AOUT_EVENT_IEC_60958_PCM 0x1
 extern int aout_notifier_call_chain(unsigned long val,void * v);
-extern void aml_hw_iec958_init(struct snd_pcm_substream *substream);
 
 static int aml_dai_i2s_prepare(struct snd_pcm_substream *substream,
 					struct snd_soc_dai *dai)
-{
+{	
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct aml_runtime_data *prtd = runtime->private_data;
 	struct aml_i2s *i2s = snd_soc_dai_get_drvdata(dai);
 	int  audio_clk_config = AUDIO_CLK_FREQ_48;
-	audio_stream_t *s = &prtd->s;
+	audio_stream_t *s = &prtd->s;	
     ALSA_TRACE();
 	switch(runtime->rate){
 		case 192000:
@@ -172,15 +154,14 @@ static int aml_dai_i2s_prepare(struct snd_pcm_substream *substream,
 			audio_clk_config	=	AUDIO_CLK_FREQ_441;
 			break;
 	};
-    if(substream->stream == SNDRV_PCM_STREAM_PLAYBACK)	
-    	audio_out_i2s_enable(0);
+
     if( i2s->old_samplerate != runtime->rate ){
 		ALSA_PRINT("enterd %s,old_samplerate:%d,sample_rate=%d\n",__func__,i2s->old_samplerate,runtime->rate);
         i2s->old_samplerate = runtime->rate;
         audio_set_i2s_clk(audio_clk_config, AUDIO_CLK_256FS, i2s->mpll);
     }
-    audio_util_set_dac_i2s_format(AUDIO_ALGOUT_DAC_FORMAT_DSP);
-
+    audio_util_set_dac_i2s_format(AUDIO_ALGOUT_DAC_FORMAT_DSP); 
+    
     if(substream->stream == SNDRV_PCM_STREAM_CAPTURE)
     {
         s->i2s_mode = dai_info[dai->id].i2s_mode;
@@ -191,17 +172,11 @@ static int aml_dai_i2s_prepare(struct snd_pcm_substream *substream,
             ppp[0] = 0x78787878;
             ppp[1] = 0x78787878;
         }
-        s->device_type = AML_AUDIO_I2SIN;
+        s->device_type = AML_AUDIO_I2SIN;       
     }
-    else{
+    else{       
         s->device_type = AML_AUDIO_I2SOUT;
         aml_hw_i2s_init(runtime);
-        if(amaudio2_enable == 1){
-            aml_hw_iec958_init(substream);
-            set_i2s_iec958_samesource(1);
-        }else if(IEC958_mode_codec==0 && kernel_android_50==1){
-            aml_hw_iec958_init(substream);
-        }
     }
     if(runtime->channels == 8){
         printk("[%s,%d]8ch PCM output->notify HDMI\n",__FUNCTION__,__LINE__);
@@ -223,12 +198,6 @@ static int aml_dai_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 			if(substream->stream == SNDRV_PCM_STREAM_PLAYBACK){
 				printk("aiu i2s playback enable\n\n");
 				audio_out_i2s_enable(1);
-				if(amaudio2_enable == 1){
-					audio_hw_958_enable(1);
-					set_i2s_iec958_samesource(1);
-				}else if(IEC958_mode_codec==0 && kernel_android_50==1){
-					audio_hw_958_enable(1);
-				}
 			}else{
 				audio_in_i2s_enable(1);
 				ppp = (int*)(rtd->dma_area+rtd->dma_bytes*2-8);
@@ -242,12 +211,6 @@ static int aml_dai_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 			if(substream->stream == SNDRV_PCM_STREAM_PLAYBACK){
 				printk("aiu i2s playback disable\n\n");
 				audio_out_i2s_enable(0);
-				if(amaudio2_enable == 1){
-					audio_hw_958_enable(0);
-					set_i2s_iec958_samesource(0);
-				}else if(IEC958_mode_codec==0 && kernel_android_50==1){
-					audio_hw_958_enable(0);
-				}
 			}else{
 				audio_in_i2s_enable(0);
 			}
@@ -257,7 +220,7 @@ static int aml_dai_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 	}
 
 	return 0;
-}
+}	
 
 static int aml_dai_i2s_hw_params(struct snd_pcm_substream *substream,
 					struct snd_pcm_hw_params *params,
@@ -271,9 +234,9 @@ static int aml_dai_set_i2s_fmt(struct snd_soc_dai *dai,
 					unsigned int fmt)
 {
 	ALSA_TRACE();
-	if(fmt&SND_SOC_DAIFMT_CBS_CFS)//slave mode
+	if(fmt&SND_SOC_DAIFMT_CBS_CFS)//slave mode 
 		dai_info[dai->id].i2s_mode = I2S_SLAVE_MODE;
-
+    
     switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
     case SND_SOC_DAIFMT_NB_NF:
          i2s_pos_sync = 0;
@@ -368,21 +331,14 @@ static int aml_i2s_dai_probe(struct platform_device *pdev)
 		goto exit;
 	}
 	dev_set_drvdata(&pdev->dev, i2s);
-
+	
 	if(of_property_read_u32(pdev->dev.of_node, "clk_src_mpll", &i2s->mpll)){
 		printk(KERN_INFO "i2s get no clk src setting in dts, use the default mpll 0\n");
 		i2s->mpll = 0;
 	}
-	//enable i2s MPLL and power gate first
-       WRITE_MPEG_REG_BITS(MPLL_I2S_CNTL, 1,14, 1);
-       audio_aiu_pg_enable(1);
 	/* enable the mclk because m8 codec need it to setup */
-       if( i2s->old_samplerate != 48000 ){
-	 	ALSA_PRINT("enterd %s,old_samplerate:%d,sample_rate=%d\n",__func__,i2s->old_samplerate,48000);
-        	i2s->old_samplerate = 48000;
-	 	audio_set_i2s_clk(AUDIO_CLK_FREQ_48, AUDIO_CLK_256FS, i2s->mpll);
-       }
-       aml_i2s_play();
+	audio_set_i2s_clk(AUDIO_CLK_FREQ_48, AUDIO_CLK_256FS, i2s->mpll);
+
 	return snd_soc_register_component(&pdev->dev, &aml_component,
 					 aml_i2s_dai, ARRAY_SIZE(aml_i2s_dai));
 
@@ -397,7 +353,7 @@ static int aml_i2s_dai_remove(struct platform_device *pdev)
 	snd_soc_unregister_component(&pdev->dev);
 	kfree(i2s);
 	i2s = NULL;
-
+	
 	return 0;
 }
 
